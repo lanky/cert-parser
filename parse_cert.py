@@ -86,7 +86,7 @@ def parse_cmdline(argv: list) -> argparse.Namespace:
         "--multi-file",
         action="store_true",
         default=False,
-        help="create an output file for each product. --output is ignored in this case (unless it is a directory)",
+        help="create an output file for each product. --output is ignored in this case",
     )
 
     opts = parser.parse_args(argv)
@@ -110,11 +110,23 @@ def parse_cmdline(argv: list) -> argparse.Namespace:
     return opts
 
 
-def filtered(item, match_all=True, **filters):
+def filtered(item: object, match_all: bool = True, **filters) -> bool:
     """
     returns true if
     1. item.attr is a string and matches value
     2. item.attr is a list and any entry matches value
+
+    Args:
+        item(rhsm.certificate2.Content): object representing a content item (repository)
+    
+    KWargs:
+        match_all(bool): match every given filter (AND). Matches any if False
+        filters: dictionary of filters mapping attributes/properties of item to fnmatch patterns.
+
+        currently supported filters are
+        'label', 'arches', 'name', 'required_tags'
+
+        although anything that is an attriute of the rhsm.certificate2.Content object can be passed
     """
     if not filters:
         return True
@@ -148,11 +160,18 @@ def filtered(item, match_all=True, **filters):
     return any(matches)
 
 
-def get_cert_content(opts: argparse.Namespace) -> list[dict]:
+def get_cert_content(certpath: str, match_all: bool = True, filters: dict = {}) -> list:
     """
     read and extract raw data from the certificate file
+
+    Args:
+        opts(argparse.Namespace): parsed commandline options, like a named tuple.
+
+    Returns:
+        products(list[dict]): list of dictionaries representing RH products (repositories)
+
     """
-    cert = certificate.create_from_file(opts.cert)
+    cert = certificate.create_from_file(certpath)
 
     products = [
         {
@@ -161,13 +180,20 @@ def get_cert_content(opts: argparse.Namespace) -> list[dict]:
             "url": f"https://cdn.redhat.com{c.url}",
             "tag": c.required_tags
         }
-        for c in cert.content if filtered(c, opts.match_all, **opts.filters)
+        for c in cert.content if filtered(c, match_all, **filters)
     ]
 
     return products
 
 
-def dump(item, fmt):
+def dump(item: object, fmt: str = "json") -> str:
+    """
+    produces a string representation of the object `item` in the chosen format
+
+    Args:
+        item(obj): JSON/YAML-serializable object
+        fmt(str): 'yaml' or 'json' (default)
+    """
     if fmt == "yaml":
         return yaml.safe_dump(item, default_flow_style=False)
     else:
@@ -181,7 +207,7 @@ def main(opts: argparse.Namespace):
     Args: opts(argparse.NameSpace) - parsed commndline options
     """
 
-    matching_items = get_cert_content(opts)
+    matching_items = get_cert_content(opts.cert, opts.match_all, opts.filters)
 
     if opts.destdir and not os.path.isdir(opts.destdir):
         try:
