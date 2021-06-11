@@ -1,0 +1,11 @@
+# ignore vim swapfiles
+*.sw[op]
+
+# compiled python bytecode
+*.pyo
+*.pyc
+
+# output files from the tool itself
+*.json
+*.yaml
+*.yml
