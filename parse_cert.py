@@ -24,12 +24,6 @@ def parse_cmdline(argv: list) -> argparse.Namespace:
 
     parser.add_argument("cert", help="path to entitlement certificate")
 
-    parser.add_argument(
-        "-r",
-        "--releasever",
-        help="Specific version to create output for (e.g. 8.4). if not provided, you'll need to replace $releasever in URLs yourself",
-    )
-
     # separate group for filtering options
     filtergrp = parser.add_argument_group(
         "Filtering Options", "These are additive (see '--any'), so all items must match"
