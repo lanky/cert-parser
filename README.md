@@ -92,9 +92,9 @@ Output options:
 
 ```
 
-Basic usage:
+## usage examples
 
-1. dump all entitlement info to stdout
+### dump all entitlement info to stdout
 `parse_cert.py entitlement_certs/CERTFILE`
 
 ```json
@@ -111,7 +111,7 @@ Basic usage:
 
 ```
 
-1. Show details for just one repo (by label)
+### Show details for just one repo (by label)
 `$ parse_cert.py -l 'rhel-8-for-x86_64-baseos-rpms' entitlement_certificates/CERTFILE`
 
 ```json
@@ -127,7 +127,7 @@ Basic usage:
 ]
 ```
 
-2. dump all entitlements with 'rhel-8' in their labels
+### dump all entitlements with 'rhel-8' in their labels
 `parse_cert.py -l 'rhel-8*' entitlement_certificates/CERTFILE`
 
 ```json
@@ -142,7 +142,7 @@ Basic usage:
   },
 ```
 
-3. Or in YAML, if you prefer
+### Or in YAML, if you prefer
 
 `parse_cert.py -l 'rhel-8*' -y entitlement_certificates/CERTFILE`
 ```yaml
@@ -158,7 +158,7 @@ Basic usage:
 [...]
 ```
 
-3. dump all matching entilements to individual files
+### dump all matching entilements to individual files
 `parse_cert.py -l 'rhel-8*' entitlement_certificates/CERTFILE -m -d OUTPUTDIR`
 
 ```sh
@@ -169,3 +169,7 @@ rhel-8-for-x86_64-appstream-debug-rpms.json       rhel-8-for-x86_64-highavailabi
 rhel-8-for-x86_64-appstream-eus-debug-rpms.json   rhel-8-for-x86_64-highavailability-eus-rpms.json         rhel-8-for-x86_64-sap-netweaver-eus-rpms.json
 [...]
 ```
+
+
+
+
