@@ -1,28 +1,44 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 # vim: set ts=4 sts=4 sw=4 et ci nu ft=python:
-import os
-import sys
 import argparse
+import io
 import json
+import os
+import re
+import sys
+import zipfile
 from fnmatch import fnmatch
 from operator import itemgetter
+from pathlib import Path
+from typing import List
+
+# requires PyYAML
+import yaml
 
 # requires rhsm python module
 from rhsm import certificate
 
-# requires PyYAML
-import yaml
+MEDIA = re.compile(r" *\((Debug|Source)? *(RPMS?s|ISOs)\) *")
 
 
 def parse_cmdline(argv: list) -> argparse.Namespace:
     """
     process commandline args
     """
-    desc = "Proceses a Red Hat entitlement certificate and produces appropriate output for creating remotes in pulp"
+    desc = """Processes a Red Hat entitlement manifest and produces appropriate
+    output for creating remotes in pulp"""
     parser = argparse.ArgumentParser(description=desc)
 
-    parser.add_argument("cert", help="path to entitlement certificate")
+    parser.add_argument(
+        "inputfile",
+        nargs="+",
+        help="""path to either an entitlement certificate,
+    or a manifest zipfile. If a manifest, will extract the certificates and put them
+    into your local 'files' directory.
+    Can be spefied multiple times.
+    """,
+    )
 
     # separate group for filtering options
     filtergrp = parser.add_argument_group(
@@ -49,6 +65,18 @@ def parse_cmdline(argv: list) -> argparse.Namespace:
     )
     # output options
     outgrp = parser.add_argument_group("Output options")
+    outgrp.add_argument(
+        "--list-tags",
+        action="store_true",
+        default=False,
+        help="list all tags and exit",
+    )
+    outgrp.add_argument(
+        "--list-products",
+        action="store_true",
+        default=False,
+        help="Just list product names and exit",
+    )
     outgrp.add_argument(
         "-y",
         "--yaml",
@@ -77,25 +105,32 @@ def parse_cmdline(argv: list) -> argparse.Namespace:
         help="target directory for output files, created if missing. Default is CWD",
     )
     outgrp.add_argument(
+        "-c",
+        "--certs-dir",
+        default="files",
+        help="output directory for certificates, if extracting from a manifest",
+    )
+    outgrp.add_argument(
         "-m",
         "--multi-file",
         action="store_true",
         default=False,
-        help="create an output file for each product. --output is ignored in this case (unless it is a directory)",
+        help="""create an output file for each product. --output is ignored
+        in this case (unless it is a directory)""",
     )
     outgrp.add_argument(
         "--table",
         action="store_true",
         default=False,
-        help="print a formatted table of mtatching repos"
+        help="print a formatted table of mtatching repos",
     )
 
     opts = parser.parse_args(argv)
 
     # check if the cert exists
-    if not os.path.exists(opts.cert):
-        print(f"No such file: {opts.cert}. Please chack and try again")
-        sys.exit(1)
+    opts.inputfile = [Path(p) for p in opts.inputfile]
+
+    opts.certs_dir = Path(opts.certs_dir)
 
     if not opts.format:
         opts.format = "json"
@@ -152,20 +187,24 @@ def filtered(item, match_all=True, filters={}):
         return res
     return any(matches)
 
+
 def get_cert_content(certpath, match_all=True, filters={}) -> list:
     """
     read and extract raw data from the certificate file
     """
-    cert = certificate.create_from_file(certpath)
+
+    cert = certificate.create_from_pem(certpath.read_text())
 
     products = [
         {
             "label": c.label,
             "name": c.name,
             "url": f"https://cdn.redhat.com{c.url}",
-            "tag": c.required_tags
+            "tags": c.required_tags,
+            "certificate": certpath.name,
         }
-        for c in cert.content if filtered(c, match_all, filters)
+        for c in cert.content
+        if filtered(c, match_all, filters)
     ]
 
     return products
@@ -177,16 +216,37 @@ def dump(item, fmt):
     else:
         return json.dumps(item, indent=2)
 
+
 def get_padding(dictlist):
     res = {}
 
     for d in dictlist:
         for k, v in d.items():
             try:
-                res[k] = max([res.get(k, 0), len(''.join(v))])
+                res[k] = max([res.get(k, 0), len("".join(v))])
             except TypeError:
-                res[k] = max( [ res.get(k, 0), len(''.join(str(v))) ] )
+                res[k] = max([res.get(k, 0), len("".join(str(v)))])
     return res
+
+
+def extract_certs(manifest: Path, destdir: Path) -> List[Path]:
+    """
+    Extract entitlements certificates from RH manifest, save them locally
+    return list of pathlib.path objects
+    """
+    pathlist = []
+    try:
+        # need to extract each of the certificates from it
+        with zipfile.ZipFile(manifest, mode="r") as mf:
+            content = zipfile.ZipFile(io.BytesIO(mf.read("consumer_export.zip")))
+        for crt in zipfile.Path(
+            content, at="export/entitlement_certificates/"
+        ).iterdir():
+            destdir.joinpath(crt.name).write_text(crt.read_text())
+            pathlist.append(destdir.joinpath(crt.name))
+    except Exception:
+        raise
+    return pathlist
 
 
 def main(opts: argparse.Namespace):
@@ -195,40 +255,59 @@ def main(opts: argparse.Namespace):
 
     Args: opts(argparse.NameSpace) - parsed commndline options
     """
+    certlist = []
+    matches = []
+    for fname in opts.inputfile:
+        if fname.suffix == ".zip":
+            certlist.extend(extract_certs(fname, destdir=opts.certs_dir))
+        else:
+            certlist.append(fname)
 
-    matching_items = get_cert_content(opts.cert, opts.match_all, opts.filters)
+    for cert in certlist:
+        matches.extend(get_cert_content(cert, opts.match_all, opts.filters))
+
+    if opts.list_tags:
+        # each match has a 'tag' key containing a list of tags
+        tags = set([t for m in matches for t in m.get("tags")])
+        print("tags:")
+        print("\n".join(sorted(list(tags))))
+        sys.exit(0)
+
+    if opts.list_products:
+        products = set([MEDIA.sub("", m["name"]) for m in matches])
+        print("Products:")
+        print("\n".join(sorted(list(products))))
+        sys.exit(0)
 
     if opts.destdir and not os.path.isdir(opts.destdir):
         try:
             os.makedirs(opts.destdir)
         except (IOError, OSError) as E:
-            print(f"cannot create {opts.destdir}, falling back to CWD")
+            print(f"cannot create {E.filename} - {E.strerror}, falling back to CWD")
             opts.destdir = os.path.realpath(os.curdir)
 
     if opts.multi_file:
-        for prod in matching_items:
+        for prod in matches:
             with open(
                 os.path.join(opts.destdir, f"{prod['label']}.{opts.format}"), "w"
             ) as o:
                 o.write(dump(prod, opts.format))
     elif opts.output:
         with open(os.path.join(opts.destdir, opts.output), "w") as o:
-            o.write(dump(matching_items, opts.format))
+            o.write(dump(matches, opts.format))
 
     elif opts.table:
-        padding = get_padding(matching_items)
+        padding = get_padding(matches)
         fmt = "{{label:{label}}} | {{name:{name}}} | {{url:{url}}}".format(**padding)
-        print (fmt.format(label='label', name='Name', url='URL'))
-        print("{l:.{label}} | {l:.{name}} | {l:.{url}}".format(l='.', **padding))
-        for repo in sorted(matching_items, key=itemgetter('label')):
+        print(fmt.format(label="label", name="Name", url="URL"))
+        print("{l:.{label}} | {l:.{name}} | {l:.{url}}".format(l=".", **padding))
+        for repo in sorted(matches, key=itemgetter("label")):
             print(fmt.format(**repo))
     else:
         # just dump the raw data
-        print(dump(matching_items, opts.format))
+        print(dump(matches, opts.format))
 
 
 if __name__ == "__main__":
     opts = parse_cmdline(sys.argv[1:])
     main(opts)
-
-
