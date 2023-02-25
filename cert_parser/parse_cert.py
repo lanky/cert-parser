@@ -57,11 +57,24 @@ def parse_cmdline(argv: list) -> argparse.Namespace:
         "-n", "--name", help="show products matching provided product name (glob)"
     )
     filtergrp.add_argument(
+        "--debug", action="store_true", default=False, help="include debug rpm repos"
+    )
+    filtergrp.add_argument(
+        "--source",
+        action="store_true",
+        default=False,
+        help="Include source repositories",
+    )
+    filtergrp.add_argument(
+        "--iso", action="store_true", default=False, help="include ISO repositories"
+    )
+    filtergrp.add_argument(
         "--any",
         action="store_const",
         dest="match_all",
         const=False,
-        help="match any of the filters, rather than all. This will probably lead to many more results",
+        help="""match any of the filters, rather than all.
+        This will probably lead to many more results""",
     )
     # output options
     outgrp = parser.add_argument_group("Output options")
@@ -144,6 +157,9 @@ def parse_cmdline(argv: list) -> argparse.Namespace:
         "name": opts.name,
         "arches": opts.arch,
         "required_tags": opts.tag,
+        "isos": opts.iso,
+        "debug": opts.debug,
+        "source": opts.source,
     }
 
     return opts
@@ -162,6 +178,9 @@ def filtered(item, match_all=True, filters={}):
         if val is None:
             matches.append(True)
             continue
+
+        # TODO
+        # handle 'iso' 'source' and 'debug' in labels
 
         # see if we have the given property/attibute.
         # we should, but meh.
