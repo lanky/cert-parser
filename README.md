@@ -1,4 +1,5 @@
 # cert-tools
+<!-- vim: set nofen nu :-->
 A python tool (possibly tools) to extract entitlement data from RH Entitlement certificates (which
 can be downloaded from the Red Hat Portal, or found on registered RHEL hosts)
 
@@ -26,15 +27,24 @@ athough you can do these things manually, or use `pip3 install --user` if you re
 mkvirtualenv -p python3 -r requirements.txt rhcerts
 ```
 
+alternatively, if you have `python-poetry` installed, you can use that:
+
+```sh
+poetry install
+poetry shell
+```
+
 ## Usage
 Once you have a certificate or manifest zipfile, you need to do the following
 
 
-### unpack the manifest
-I may add this functionality in a future update, but for now...
+### optionally unpack the manifest
 
-You should note that the manifests are nested zipfiles and that the `rct` tool will extract the
-content into CWD, so create a target directory first and change into it.
+The tool can read info directly from the manifest file now, but if you want to:
+
+You should note that the manifests are nested zipfiles and that the `rct` tool
+will extract the content into CWD, so create a target directory first and
+change into it.
 
 ```sh
 mkdir manifest
@@ -51,18 +61,22 @@ The script has built-in help
 
 ```sh
 $ ./parse_cert.py --help
-usage: parse_cert.py [-h] [-r RELEASEVER] [-t TAG] [-a ARCH] [-l LABEL]
-                     [-n NAME] [--any] [-y] [-j] [-o OUTPUT] [-d DESTDIR] [-m]
-                     [--table]
-                     cert
+usage: parse_cert.py [-h] [-t TAG] [-a ARCH] [-l LABEL] [-n NAME] [--debug]
+                     [--source] [--iso] [--any] [--list-tags]
+                     [--list-products] [-y] [-j] [-o OUTPUT] [-d DESTDIR]
+                     [-c CERTS_DIR] [-m] [--table]
+                     inputfile [inputfile ...]
 
-Proceses a Red Hat entitlement certificate and produces appropriate output for
+Processes a Red Hat entitlement manifest and produces appropriate output for
 creating remotes in pulp
 
 positional arguments:
-  cert                  path to entitlement certificate
+  inputfile             path to either an entitlement certificate, or a
+                        manifest zipfile. If a manifest, will extract the
+                        certificates and put them into your local 'files'
+                        directory. Can be spefied multiple times.
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
 
 Filtering Options:
@@ -74,10 +88,15 @@ Filtering Options:
   -l LABEL, --label LABEL
                         show products matching the given label (glob)
   -n NAME, --name NAME  show products matching provided product name (glob)
+  --debug               include debug rpm repos
+  --source              Include source repositories
+  --iso                 include ISO repositories
   --any                 match any of the filters, rather than all. This will
                         probably lead to many more results
 
 Output options:
+  --list-tags           list all tags and exit
+  --list-products       Just list product names and exit
   -y, --yaml            produce output in YAML
   -j, --json            produce output in JSON
   -o OUTPUT, --output OUTPUT
@@ -86,8 +105,11 @@ Output options:
   -d DESTDIR, --destdir DESTDIR
                         target directory for output files, created if missing.
                         Default is CWD
+  -c CERTS_DIR, --certs-dir CERTS_DIR
+                        output directory for certificates, if extracting from
+                        a manifest
   -m, --multi-file      create an output file for each product. --output is
-                        ignored in this case
+                        ignored in this case (unless it is a directory)
   --table               print a formatted table of mtatching repos
 
 ```
@@ -96,6 +118,8 @@ Output options:
 
 ### dump all entitlement info to stdout
 `parse_cert.py entitlement_certs/CERTFILE`
+or
+`parse_cert.py manifest_file.zip` to process all the certificates in it
 
 ```json
 [
@@ -169,7 +193,3 @@ rhel-8-for-x86_64-appstream-debug-rpms.json       rhel-8-for-x86_64-highavailabi
 rhel-8-for-x86_64-appstream-eus-debug-rpms.json   rhel-8-for-x86_64-highavailability-eus-rpms.json         rhel-8-for-x86_64-sap-netweaver-eus-rpms.json
 [...]
 ```
-
-
-
-
