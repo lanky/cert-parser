@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# -*- encoding: utf-8 -*-
 # vim: set ts=4 sts=4 sw=4 et ci nu ft=python:
+"""Parse a RH manifest entitlement certificate."""
+
 import argparse
 import io
 import json
@@ -23,9 +24,7 @@ MEDIA = re.compile(r" *\((Debug|Source)? *(RPMS?s|ISOs)\) *")
 
 
 def parse_cmdline(argv: list) -> argparse.Namespace:
-    """
-    process commandline args
-    """
+    """Process commandline args."""
     desc = """Processes a Red Hat entitlement manifest and produces appropriate
     output for creating remotes in pulp"""
     parser = argparse.ArgumentParser(description=desc)
@@ -166,14 +165,22 @@ def parse_cmdline(argv: list) -> argparse.Namespace:
 
 
 def filtered(item, match_all=True, filters={}):
-    """
-    returns true if
+    """Decide whether an item matches our defined filters.
+
     1. item.attr is a string and matches value
     2. item.attr is a list and any entry matches value
     """
     if not filters:
         return True
     matches = []
+    # include_iso = filters.pop("isos", False)
+    # include_debug = filters.pop("debug", False)
+    # include_source = filters.pop("source", False)
+
+    #     matches.append(include_iso and "-iso" in item.label)
+    #     matches.append(include_debug and "-debug" in item.label)
+    #     matches.append(include_source and "-source" in item.label)
+
     for att, val in filters.items():
         if val is None:
             matches.append(True)
@@ -192,7 +199,8 @@ def filtered(item, match_all=True, filters={}):
                 if isinstance(prop, list)
                 else fnmatch(prop, val)
             )
-            # if we are in additive mode (the default), we can fail immediately if no match
+            # if we are in additive mode (the default),
+            # we can fail immediately if no match
             if match_all and not res:
                 return res
             else:
@@ -208,10 +216,7 @@ def filtered(item, match_all=True, filters={}):
 
 
 def get_cert_content(certpath, match_all=True, filters={}) -> list:
-    """
-    read and extract raw data from the certificate file
-    """
-
+    """Read and extract raw data from the certificate file."""
     cert = certificate.create_from_pem(certpath.read_text())
 
     products = [
@@ -230,6 +235,7 @@ def get_cert_content(certpath, match_all=True, filters={}) -> list:
 
 
 def dump(item, fmt):
+    """Output an item in either YAML or JSON."""
     if fmt == "yaml":
         return yaml.safe_dump(item, default_flow_style=False)
     else:
@@ -237,6 +243,7 @@ def dump(item, fmt):
 
 
 def get_padding(dictlist):
+    """Set padding."""
     res = {}
 
     for d in dictlist:
@@ -249,8 +256,9 @@ def get_padding(dictlist):
 
 
 def extract_certs(manifest: Path, destdir: Path) -> List[Path]:
-    """
-    Extract entitlements certificates from RH manifest, save them locally
+    """Extract entitlements certificates from RH manifest.
+
+    save them locally
     return list of pathlib.path objects
     """
     pathlist = []
@@ -269,7 +277,8 @@ def extract_certs(manifest: Path, destdir: Path) -> List[Path]:
 
 
 def main(opts: argparse.Namespace):
-    """
+    """Run all the things.
+
     Main script functionality
 
     Args: opts(argparse.NameSpace) - parsed commndline options
@@ -301,7 +310,7 @@ def main(opts: argparse.Namespace):
     if opts.destdir and not os.path.isdir(opts.destdir):
         try:
             os.makedirs(opts.destdir)
-        except (IOError, OSError) as E:
+        except OSError as E:
             print(f"cannot create {E.filename} - {E.strerror}, falling back to CWD")
             opts.destdir = os.path.realpath(os.curdir)
 
